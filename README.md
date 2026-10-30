@@ -22,11 +22,16 @@ Held-out test period: September to October 2025 (9,523 loads), scored once after
 
 The final model cuts test MAE by 38% against the baseline. Cross-validation slightly favored Ridge, while the test period favored HistGradientBoosting, so choosing between them on the test score makes that number mildly optimistic. No tuning was done after seeing it.
 
+![Test MAE by model](images/model_comparison.png)
+
 ![Actual vs predicted](images/actual_vs_predicted.png)
 
 ## Approach
 
-- **Time-based split.** Train: January to August. Test: September to October. A random split would let the model see days on both sides of every test day and overstate accuracy.
+- **Time-based split.** Train: January to August. Test: September to October. A random split would let the model see days on both sides of every test day and overstate accuracy. Market conditions also shift through the year, so the split follows the calendar.
+
+![Daily average market index](images/market_index_timeline.png)
+
 - **Time-ordered cross-validation.** Five expanding-window folds built on unique dates, so a model is never scored on days before its training data, and loads from one day never straddle a fold boundary.
 
 ![CV folds](images/cv_folds.png)
@@ -44,7 +49,7 @@ The final model cuts test MAE by 38% against the baseline. Cross-validation slig
 
 ## Data
 
-The dataset is private and is not included in this repository. <!-- TODO: add one line on provenance, e.g. "Provided as part of a [course / assessment / competition]." Check any confidentiality terms before describing it publicly. --> Each row is a load with these columns: `load_id`, `pickup`, `delivery`, `pickup_lat`, `pickup_lon`, `delivery_lat`, `delivery_lon`, `distance`, `equipment`, `weight`, `date`, `market_index`, `quote_signal`, and the target `posted_rate` (labeled data only).
+The dataset is private and is not included in this repository. Each row is a load with these columns: `load_id`, `pickup`, `delivery`, `pickup_lat`, `pickup_lon`, `delivery_lat`, `delivery_lon`, `distance`, `equipment`, `weight`, `date`, `market_index`, `quote_signal`, and the target `posted_rate` (labeled data only).
 
 Data quality issues handled:
 
@@ -104,16 +109,6 @@ Response:
 ```
 {"predicted_rate": 796.36}
 ```
-
-<!--
-OPTIONAL: add this section only after you have actually added and tested a Dockerfile,
-then delete the "not containerized" wording in Limitations below.
-
-## Run with Docker
-
-docker build -t freight-api .
-docker run -p 8000:8000 freight-api
--->
 
 ## Tests
 
