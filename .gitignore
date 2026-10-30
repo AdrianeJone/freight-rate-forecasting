@@ -229,3 +229,5 @@ december-chart-predictions.csv
 scorer_results/
 check/
 outputs/
+# Trained model (contains training data via the KNN imputer)
+models/
