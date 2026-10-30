@@ -218,3 +218,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local data and environment
+data/
+freight-env/
+
+# Generated outputs
+validation_predictions.csv
+december-chart-predictions.csv
+scorer_results/
+check/
