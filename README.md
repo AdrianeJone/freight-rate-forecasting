@@ -1,8 +1,10 @@
 # Freight Rate Forecasting
 
-![CI](https://github.com/AdrianeJone/freight-rate-forecasting/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/AdrianeJone/freight-rate-forecasting/actions/workflows/ci.yml/badge.svg)](https://github.com/AdrianeJone/freight-rate-forecasting/actions/workflows/ci.yml)
 
 Time-aware forecasting of freight load rates with scikit-learn and Optuna. The model predicts the posted rate of a load from its lane, distance, equipment, weight, date and two market signals, and is validated the way it will be used: trained on the past, tested on the future. A FastAPI service serves the trained model.
+
+**Headline result:** a tuned HistGradientBoosting model cuts held-out test MAE by 38% against a rate-per-mile baseline ($229 to $142, 6.0% MAPE).
 
 ## Problem
 
@@ -12,11 +14,11 @@ Given 48,000 labeled loads from January to October 2025, predict the rate of 12,
 
 Held-out test period: September to October 2025 (9,523 loads), scored once after tuning.
 
-| Model | CV MAE | Test MAE | Test MAPE |
-|---|---|---|---|
-| Baseline (median rate per mile by equipment) | $204 | $229 | 10.5% |
-| Ridge (tuned) | $115 | $165 | 7.1% |
-| HistGradientBoosting (tuned) | $123 | **$142** | **6.0%** |
+| Model                                        | CV MAE | Test MAE | Test MAPE |
+|----------------------------------------------|--------|----------|-----------|
+| Baseline (median rate per mile by equipment) | $204   | $229     | 10.5%     |
+| Ridge (tuned)                                | $115   | $165     | 7.1%      |
+| HistGradientBoosting (tuned)                 | $123   | **$142** | **6.0%**  |
 
 The final model cuts test MAE by 38% against the baseline. Cross-validation slightly favored Ridge, while the test period favored HistGradientBoosting, so choosing between them on the test score makes that number mildly optimistic. No tuning was done after seeing it.
 
@@ -31,7 +33,7 @@ The final model cuts test MAE by 38% against the baseline. Cross-validation slig
 
 - **No leakage.** Scaling, one-hot encoding and a KNN imputer are fit on training data only.
 - **Robust to unseen locations.** The validation set has 8 cities never seen in training, so locations enter the model as coordinates and distance, not city names.
-- **Model.** HistGradientBoosting on log(rate) with an absolute-error loss, tuned with Optuna (TPE sampler, 30 trials, fixed seed). Ridge was tuned the same way, with the same folds and metric, for a fair comparison.
+- **Model.** HistGradientBoosting on log(rate) with an absolute-error loss, tuned with Optuna (TPE sampler, 30 trials, fixed seed). Ridge was tuned the same way, with the same folds and metric, for a fair comparison. Random Forest was run with default settings only, as an extra reference.
 - **Final fit.** The chosen settings are refit on all labeled data before predicting the forecast period.
 
 ## What the error analysis found
@@ -42,9 +44,10 @@ The final model cuts test MAE by 38% against the baseline. Cross-validation slig
 
 ## Data
 
-The dataset is private and is not included in this repository. Each row is a load with these columns: `load_id`, `pickup`, `delivery`, `pickup_lat`, `pickup_lon`, `delivery_lat`, `delivery_lon`, `distance`, `equipment`, `weight`, `date`, `market_index`, `quote_signal`, and the target `posted_rate` (labeled data only).
+The dataset is private and is not included in this repository. <!-- TODO: add one line on provenance, e.g. "Provided as part of a [course / assessment / competition]." Check any confidentiality terms before describing it publicly. --> Each row is a load with these columns: `load_id`, `pickup`, `delivery`, `pickup_lat`, `pickup_lon`, `delivery_lat`, `delivery_lon`, `distance`, `equipment`, `weight`, `date`, `market_index`, `quote_signal`, and the target `posted_rate` (labeled data only).
 
 Data quality issues handled:
+
 - 292 negative weights, treated as sign errors and converted with the absolute value.
 - Weight capped at 47,500 lb (1,191 loads at the cap).
 - Missing `weight` (0.6%) and `market_index` (0.8%), filled by a KNN imputer.
@@ -53,7 +56,7 @@ Data quality issues handled:
 
 Requires Python 3.10+. From the repo root (Windows PowerShell):
 
-```powershell
+```
 python -m venv freight-env
 .\freight-env\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
@@ -65,7 +68,7 @@ On macOS or Linux, activate with `source freight-env/bin/activate`.
 
 To run this on your own data, place files with the same schema in a `data/` folder, using these file names: `train-test.csv`, `validation.csv`, `validation-predictions-template.csv`, `december-chart-inputs.csv`. Then:
 
-```powershell
+```
 python src/make_predictions.py --data-dir data --out-dir outputs
 ```
 
@@ -75,35 +78,46 @@ This fits the final model on all labeled data and writes the forecast files to `
 
 Fit the final model and save it. The saved file is not committed, because the KNN imputer stores training rows:
 
-```powershell
+```
 python src/train_model.py --data-dir data
 ```
 
 Start the service and open the interactive docs at `http://127.0.0.1:8000/docs`:
 
-```powershell
+```
 uvicorn api:app --app-dir src
 ```
 
 Endpoints:
+
 - `GET /health` reports whether the model is loaded.
 - `POST /predict` takes one load and returns its predicted rate. `weight` and `market_index` are optional and are imputed when missing. Invalid input (unknown equipment, non-positive distance, a malformed date, out-of-range coordinates) returns a 422 error.
 
 Example request (PowerShell):
 
-```powershell
+```
 Invoke-RestMethod -Uri http://127.0.0.1:8000/predict -Method Post -ContentType "application/json" -Body '{"pickup_lat": 36.99152, "pickup_lon": -84.99876, "delivery_lat": 41.31561, "delivery_lon": -85.36206, "distance": 360, "equipment": "Dry Van", "weight": 32000, "date": "2025-12-03", "market_index": 0.994063, "quote_signal": 2.053293}'
 ```
 
 Response:
 
-```json
+```
 {"predicted_rate": 796.36}
 ```
 
+<!--
+OPTIONAL: add this section only after you have actually added and tested a Dockerfile,
+then delete the "not containerized" wording in Limitations below.
+
+## Run with Docker
+
+docker build -t freight-api .
+docker run -p 8000:8000 freight-api
+-->
+
 ## Tests
 
-```powershell
+```
 python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
@@ -112,17 +126,17 @@ The tests build a small synthetic dataset with the same schema and the same data
 
 ## Repository layout
 
-| Path | Purpose |
-|---|---|
-| `notebooks/01_eda.ipynb` | Exploratory data analysis |
+| Path                          | Purpose                                                                         |
+|-------------------------------|---------------------------------------------------------------------------------|
+| `notebooks/01_eda.ipynb`      | Exploratory data analysis                                                       |
 | `notebooks/02_modeling.ipynb` | Split, preprocessing, model comparison, tuning, test evaluation, error analysis |
-| `src/pipeline.py` | Cleaning, features, preprocessing and final model |
-| `src/make_predictions.py` | Rebuilds the forecast files from the raw data |
-| `src/train_model.py` | Fits the final model and saves it for the API |
-| `src/api.py` | FastAPI prediction service |
-| `tests/` | Pytest suite on synthetic data |
-| `.github/workflows/ci.yml` | Runs the tests on every push |
-| `images/` | Figures used in this README |
+| `src/pipeline.py`             | Cleaning, features, preprocessing and final model                               |
+| `src/make_predictions.py`     | Rebuilds the forecast files from the raw data                                   |
+| `src/train_model.py`          | Fits the final model and saves it for the API                                   |
+| `src/api.py`                  | FastAPI prediction service                                                      |
+| `tests/`                      | Pytest suite on synthetic data                                                  |
+| `.github/workflows/ci.yml`    | Runs the tests on every push                                                    |
+| `images/`                     | Figures used in this README                                                     |
 
 ## Limitations
 
@@ -130,4 +144,10 @@ The tests build a small synthetic dataset with the same schema and the same data
 - The small under-prediction of typical loads may persist in the forecast period.
 - Random Forest was compared with default settings only and was not tuned.
 - The search budget was kept small (30 trials per model).
+- The model was selected on the test period after cross-validation favored Ridge, so the reported test MAE is mildly optimistic.
+- The dataset is private, so the reported numbers cannot be reproduced from this repository alone.
 - The API runs locally and is not containerized or deployed, and the tests check behavior on synthetic data, not model accuracy.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
