@@ -228,3 +228,4 @@ validation_predictions.csv
 december-chart-predictions.csv
 scorer_results/
 check/
+outputs/
