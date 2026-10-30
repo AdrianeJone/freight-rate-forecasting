@@ -1,6 +1,8 @@
 # Freight Rate Forecasting
 
-Time-aware forecasting of freight load rates with scikit-learn and Optuna. The model predicts the posted rate of a load from its lane, distance, equipment, weight, date and two market signals, and is validated the way it will be used: trained on the past, tested on the future.
+![CI](https://github.com/AdrianeJone/freight-rate-forecasting/actions/workflows/ci.yml/badge.svg)
+
+Time-aware forecasting of freight load rates with scikit-learn and Optuna. The model predicts the posted rate of a load from its lane, distance, equipment, weight, date and two market signals, and is validated the way it will be used: trained on the past, tested on the future. A FastAPI service serves the trained model.
 
 ## Problem
 
@@ -69,6 +71,45 @@ python src/make_predictions.py --data-dir data --out-dir outputs
 
 This fits the final model on all labeled data and writes the forecast files to `outputs/`. The Optuna search runs in `notebooks/02_modeling.ipynb`, and the script uses the best settings it found, stored in `src/pipeline.py`.
 
+## Serve the model as an API
+
+Fit the final model and save it. The saved file is not committed, because the KNN imputer stores training rows:
+
+```powershell
+python src/train_model.py --data-dir data
+```
+
+Start the service and open the interactive docs at `http://127.0.0.1:8000/docs`:
+
+```powershell
+uvicorn api:app --app-dir src
+```
+
+Endpoints:
+- `GET /health` reports whether the model is loaded.
+- `POST /predict` takes one load and returns its predicted rate. `weight` and `market_index` are optional and are imputed when missing. Invalid input (unknown equipment, non-positive distance, a malformed date, out-of-range coordinates) returns a 422 error.
+
+Example request (PowerShell):
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:8000/predict -Method Post -ContentType "application/json" -Body '{"pickup_lat": 36.99152, "pickup_lon": -84.99876, "delivery_lat": 41.31561, "delivery_lon": -85.36206, "distance": 360, "equipment": "Dry Van", "weight": 32000, "date": "2025-12-03", "market_index": 0.994063, "quote_signal": 2.053293}'
+```
+
+Response:
+
+```json
+{"predicted_rate": 796.36}
+```
+
+## Tests
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m pytest
+```
+
+The tests build a small synthetic dataset with the same schema and the same data-quality problems as the real data (negative and missing weights, missing `market_index`), so they run without the private data. They cover feature cleaning, the model pipeline and the API (health, valid and invalid requests). GitHub Actions runs them on every push.
+
 ## Repository layout
 
 | Path | Purpose |
@@ -77,6 +118,10 @@ This fits the final model on all labeled data and writes the forecast files to `
 | `notebooks/02_modeling.ipynb` | Split, preprocessing, model comparison, tuning, test evaluation, error analysis |
 | `src/pipeline.py` | Cleaning, features, preprocessing and final model |
 | `src/make_predictions.py` | Rebuilds the forecast files from the raw data |
+| `src/train_model.py` | Fits the final model and saves it for the API |
+| `src/api.py` | FastAPI prediction service |
+| `tests/` | Pytest suite on synthetic data |
+| `.github/workflows/ci.yml` | Runs the tests on every push |
 | `images/` | Figures used in this README |
 
 ## Limitations
@@ -85,3 +130,4 @@ This fits the final model on all labeled data and writes the forecast files to `
 - The small under-prediction of typical loads may persist in the forecast period.
 - Random Forest was compared with default settings only and was not tuned.
 - The search budget was kept small (30 trials per model).
+- The API runs locally and is not containerized or deployed, and the tests check behavior on synthetic data, not model accuracy.
